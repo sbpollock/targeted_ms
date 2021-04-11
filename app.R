@@ -67,7 +67,9 @@ ui <- fluidPage(
                                                style="height: 118px; padding-bottom: 8px; top: 0px;")))),
             tags$div(id="csvs_progress", class="progress progress-striped active shiny-file-input-progress",
                      list(
-                         tags$div(class="progress-bar")))
+                         tags$div(class="progress-bar"))),
+            # Button
+            downloadButton("downloadData", "Download")
         ),
         
         
@@ -300,6 +302,15 @@ server <- function(input,output,session) {
         
     })
     
+    # Downloadable csv of selected dataset ----
+  output$downloadData <- downloadHandler(
+    filename = function() {
+      gsub(":","-",gsub(" ","_",paste0(now(),"_targeted_ms.csv")))
+    },
+    content = function(file) {
+      write.csv(mass_list$list_mass, file, row.names = FALSE)
+    }
+  )
 }
 app <- shinyApp(ui = ui, server = server)
 runApp(app, host ="0.0.0.0", port = 3838, launch.browser = TRUE)
