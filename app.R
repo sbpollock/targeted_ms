@@ -9,6 +9,7 @@ library(scales)
 library(data.table)
 library(RColorBrewer)
 library(markdown)
+library(plotlyBars)
 
 # Set Shiny options
 options(shiny.maxRequestSize=900*1024^2)
@@ -47,14 +48,14 @@ ui <- fluidPage(
     theme = shinythemes::shinytheme("cerulean"), #https://shiny.rstudio.com/gallery/shiny-theme-selector.html
     
     # Application title
-    titlePanel("Mass Spec - Targeted Analysis"),
+    titlePanel("Mass Spec Raw File Analysis"),
     headerPanel(""),
     
     #Sidebar (INPUTS)
     sidebarLayout(
         sidebarPanel(
-            textAreaInput("targets", "Peptide Targets", ""),
-            strong("Raw files"),
+            textAreaInput("targets", "(optional) Peptide Targets", value="PEPTIDE[+2]"),
+            strong("Raw Files"),
             br(),br(),
             tags$div(class="input-group", style="height: 38px;",
                      list(
@@ -69,7 +70,8 @@ ui <- fluidPage(
                      list(
                          tags$div(class="progress-bar"))),
             # Button
-            downloadButton("downloadData", "Download")
+            downloadButton("downloadRaw", "Download Raw File Data"),
+            downloadButton("downloadTarget", "Download Targeted Data")
         ),
         
         
@@ -92,11 +94,16 @@ ui <- fluidPage(
                            h4("QTALVELLK[+2]",style="color:black")),
                            
                            column(4,
-                            h3("MC38-Global",style="color:black"),
-                            h4("YGYSNRVVDLM[+2]",style="color:black")),
+                            h3("6 x 5",style="color:black"),
+                            h4("V(+6)T(+5)S(+4)GST(+5)ST(+5)SR(+10)[+2]",style="color:black"),
+                            h4("L(+7)A(+4)SV(+6)SV(+6)S(+4)R(+10)[+2]",style="color:black"),
+                            h4("YV(+6)YV(+6)ADV(+6)A(+4)A(+4)K(+8)[+2]",style="color:black"),
+                            h4("V(+6)V(+6)GGLV(+6)ALR(+10)[+2]",style="color:black"),
+                            h4("L(+7)L(+7)SL(+7)GAGEF(+10)K(+8)[+2]",style="color:black"),
+                            h4("L(+7)GF(+10)TDL(+7)F(+10)SK(+8)[+2]",style="color:black")),
                            
                            column(4,
-                            h3("MC38-MHCI",style="color:black"),
+                            h3("HeLa",style="color:black"),
                             h4("ASMTNMELM[+2]",style="color:black"),
                             h4("ASMTNM(+15.99)ELM[+2]",style="color:black"),
                             h4("AQLANDVVL[+2]",style="color:black"),
@@ -116,11 +123,24 @@ ui <- fluidPage(
                            .raw files, https://www.ebi.ac.uk/pride/archive/projects/PXD009542 is a really nice
                            PRIDE entry.")
                 ),
-                tabPanel("Targets",
+                tabPanel("Raw Preview",
                          tableOutput("table")
                 ),
-                tabPanel("Retention",
-                         plotlyOutput("plot")
+                tabPanel("TIC",
+                         br(),
+                         plotlyBarsUI("plot1")
+                ),
+                tabPanel("Fill Time",
+                         br(),
+                         plotlyBarsUI("plot2a"),
+                         plotlyBarsUI("plot2b")
+                ),
+                tabPanel("XIC",
+                         br(),
+                         plotlyOutput("plot3")
+                ),
+                tabPanel("Targets",
+                         tableOutput("table2")
                 )
             ))))
 
@@ -131,6 +151,10 @@ server <- function(input,output,session) {
     peptide_info <- reactiveValues(info_peptide = NULL)
     file_df <- reactiveValues(df_files = NULL)
     mass_list <- reactiveValues(list_mass = NULL)
+    raw_table <- reactiveValues(table_raw = NULL)
+    BPI_df <- reactiveValues(df_BPI = NULL)
+    MS1_df <- reactiveValues(df_MS1 = NULL)
+    MS2_df <- reactiveValues(df_MS2 = NULL)
     
     observeEvent(input$csvs, {
         info_peptide <- read.table(text = input$targets,header=F,stringsAsFactors = F)
@@ -221,7 +245,7 @@ server <- function(input,output,session) {
         # Then sum the between-parentheses values, residue masses, and add
         # N and C termini and that's it
         total_sum <- vector()
-        ppm <- 0 #correction value (0.00047 for my BSA data)
+        ppm <- 0.063 #correction value (0.00047 for my BSA data)
         
         for (j in 1:length(clean_names)){
             total_sum <- c(total_sum,
@@ -257,6 +281,7 @@ server <- function(input,output,session) {
         
         # ** 3.1.4 Mass List -----
         list_mass <- data.frame()
+        table_raw <- data.frame()
         withProgress(message = 'Processing', value = 0, {
             for (i in 1:nrow(file_df$df_files)) {
                 incProgress(i/nrow(file_df$df_files), detail = paste0("File ",i," of ",nrow(file_df$df_files)))
@@ -268,20 +293,56 @@ server <- function(input,output,session) {
                         mutate(file=file_df$df_files[i,1],peptide=info_peptide$peptide[j])
                     list_mass <- rbind(list_mass,df_temp)
                 }
+                temp_TIC2 <- temp_TIC %>%
+                    mutate(file=file_df$df_files[i,1])
+                    table_raw <- rbind(table_raw,temp_TIC2)
             }
         })
         
         mass_list$list_mass <- list_mass
+        raw_table$table_raw <- table_raw
+
+        MS1_df$df_MS1 <- subset(raw_table$table_raw,MSOrder=="Ms")
+        MS2_df$df_MS2 <- subset(raw_table$table_raw,MSOrder=="Ms2")
+        BPI_df$df_BPI <- subset(raw_table$table_raw,BasePeakIntensity>1E5)
     })
     
-    # * 3.2 Tab1 (Targets) -----  
+    # Raw Previous Tab -----  
     output$table <- renderTable({
-        peptide_info$info_peptide
-        
-    },digits=4)
+        head(raw_table$table_raw, n=25)
+    })
+
+    # TIC Tab
+    callModule(plotlyBars,
+             "plot1",
+             plot_reactive = reactive({
+        ggplot(BPI_df$df_BPI) +
+        geom_line(aes(x=StartTime,y=BasePeakIntensity,color=file)) +
+        labs(x="Retention Time (min)", y="Intensity",title="Base Peak Intensity",color="File")  
+    })
+    )
+
+    # Fill Tab
+    callModule(plotlyBars,
+             "plot2a",
+             plot_reactive = reactive({
+        ggplot(MS1_df$df_MS1) +
+        geom_point(aes(x=StartTime,y=IonInjectionTimems,color=file),alpha=0.5,size=0.5) +
+        labs(x="Retention Time (min)", y="Milliseconds",title="MS1 Ion Injection Time",color="File")   
+    })
+    )
+
+    callModule(plotlyBars,
+             "plot2b",
+             plot_reactive = reactive({
+        ggplot(MS2_df$df_MS2) +
+        geom_point(aes(x=StartTime,y=IonInjectionTimems,color=file),alpha=0.5,size=0.5) +
+        labs(x="Retention Time (min)", y="Milliseconds",title="MS2 Ion Injection Time",color="File")   
+    })
+    )
     
-    # * 3.3 Tab2 (Retention) -----
-    output$plot <- renderPlotly({
+    # Retention Tab -----
+    output$plot3 <- renderPlotly({
         
         plot_ly(mass_list$list_mass,x=~times,y=~intensities, color=~file,
                 mode="lines+markers",
@@ -298,20 +359,36 @@ server <- function(input,output,session) {
                 #   range = c(10,20)),
                 yaxis = list(
                     exponentformat = "E")
-            )
-        
+            )  
+    })
+
+    # Targets Tab -----
+    output$table2 <- renderTable({
+        peptide_info$info_peptide
     })
     
-    # Downloadable csv of selected dataset ----
-  output$downloadData <- downloadHandler(
-    filename = function() {
-      gsub(":","-",gsub(" ","_",paste0(now(),"_targeted_ms.csv")))
+    # Download csv of rawfile data ----
+    output$downloadRaw <- downloadHandler(
+        filename = function() {
+        gsub(":","-",gsub(" ","_",paste0(now(),"_ms-dashboard_rawfiles.csv")))
     },
-    content = function(file) {
-      write.csv(mass_list$list_mass, file, row.names = FALSE)
+        content = function(file) {
+        write.csv(raw_table$table_raw, file, row.names = FALSE)
     }
-  )
+    )
+
+    # Download csv of targeted data ----
+    output$downloadRaw <- downloadHandler(
+        filename = function() {
+        gsub(":","-",gsub(" ","_",paste0(now(),"_ms-dashboard_targeted.csv")))
+    },
+        content = function(file) {
+        write.csv(mass_list$list_mass, file, row.names = FALSE)
+    }
+    )
 }
+
+# Run the app
 app <- shinyApp(ui = ui, server = server)
 runApp(app, host ="0.0.0.0", port = 3838, launch.browser = TRUE)
 

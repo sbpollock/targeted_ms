@@ -26,6 +26,8 @@ RUN R -e "install.packages('testthat', repos='http://cran.rstudio.com/')"
 # Install rawDiag
 RUN R -e "install.packages('http://fgcz-ms.uzh.ch/~cpanse/rawDiag_0.0.41.tar.gz', repo=NULL)"
 
+RUN R -e "devtools::install_github('andrewsali/plotlyBars')"
+
 # Copy the app and files to the image
 COPY app.R /srv/shiny-server/
 COPY files /srv/shiny-server/files
