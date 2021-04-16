@@ -93,6 +93,7 @@ ui <- fluidPage(
                            h4("LVNELTEFAK[+2]",style="color:black"),
                            h4("QTALVELLK[+2]",style="color:black")),
                            
+                           # https://www.promega.com/products/mass-spectrometry/mass-spec-reference-reagents/6-x-5-lc_ms_ms-peptide-reference-mix/?catNum=V7491
                            column(4,
                             h3("6 x 5",style="color:black"),
                             h4("V(+6)T(+5)S(+4)GST(+5)ST(+5)SR(+10)[+2]",style="color:black"),

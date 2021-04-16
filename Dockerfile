@@ -30,7 +30,7 @@ RUN R -e "devtools::install_github('andrewsali/plotlyBars')"
 
 # Copy the app and files to the image
 COPY app.R /srv/shiny-server/
-COPY files /srv/shiny-server/files
+#COPY files /srv/shiny-server/files
 
 # Select port
 EXPOSE 3838
